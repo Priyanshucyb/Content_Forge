@@ -1,7 +1,7 @@
 import os
 import json
 import re
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from groq import Groq
 
 MAX_SOURCE_CHARS = int(os.getenv("MAX_SOURCE_CHARS", "50000"))
@@ -109,9 +109,14 @@ def _extract_facts(source: str) -> List[str]:
     return sentences[:8]
 
 
-def _groq_outputs(source: str, outputs: List[str], settings: Dict[str, str]) -> Dict[str, Any]:
+def _groq_outputs(
+    source: str,
+    outputs: List[str],
+    settings: Dict[str, str],
+    image_data_url: Optional[str] = None,
+) -> Dict[str, Any]:
     client = Groq(api_key=os.environ["GROQ_API_KEY"])
-    model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    model = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
     output_schema = {
         key: (
@@ -135,19 +140,34 @@ def _groq_outputs(source: str, outputs: List[str], settings: Dict[str, str]) -> 
     }
 
     system = """You are ContentForge AI, a professional content transformation engine.
-You must transform the provided source into requested communication artefacts.
-Use only information supported by the source. Do not invent names, statistics, quotes,
-dates, claims, or citations. If information is missing, say that it is not available.
-The same source must be the factual basis for every requested output.
-Return VALID JSON ONLY, with an object named "outputs". Do not wrap JSON in markdown.
+Transform the provided source into the requested communication artefacts.
+
+IMPORTANT:
+- If an image is supplied, inspect the actual image. Read visible text, headings,
+  numbers, charts and relevant visual context. Perform visual understanding/OCR.
+- Do not treat the filename or image dimensions as the content.
+- Do not invent facts, names, numbers, quotes, dates, or citations.
+- If something is unreadable, say it is unavailable.
+- Use the same verified source facts across every selected output.
+- Make outputs polished and publication-ready.
+- Respect audience, tone, language, detail, objective and style.
+- Return VALID JSON ONLY with an object named "outputs".
 """
 
-    user = {
-        "source": _trim(source),
-        "settings": settings,
-        "requested_outputs": {k: OUTPUT_NAMES.get(k, k) for k in outputs},
-        "schema": output_schema,
-    }
+    user_content = [{
+        "type": "text",
+        "text": json.dumps({
+            "source_text": source,
+            "settings": settings,
+            "requested_outputs": {k: OUTPUT_NAMES.get(k, k) for k in outputs},
+            "schema": output_schema,
+        }, ensure_ascii=False)
+    }]
+    if image_data_url:
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": image_data_url}
+        })
 
     response = client.chat.completions.create(
         model=model,
@@ -155,16 +175,15 @@ Return VALID JSON ONLY, with an object named "outputs". Do not wrap JSON in mark
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": system},
-            {"role": "user", "content": json.dumps(user, ensure_ascii=False)},
+            {"role": "user", "content": user_content},
         ],
     )
-
     data = json.loads(response.choices[0].message.content)
     return data.get("outputs", data)
 
-
 def generate_outputs(source_text: str, outputs: List[str], audience: str, tone: str,
-                     language: str, detail: str, objective: str, style: str):
+                     language: str, detail: str, objective: str, style: str,
+                     image_data_url: Optional[str] = None):
     valid = [x for x in outputs if x in OUTPUT_NAMES]
     if not valid:
         raise ValueError("Select at least one valid output type.")

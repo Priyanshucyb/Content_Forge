@@ -20,7 +20,7 @@ The system creates one normalized source context first and then generates all se
 
 - Frontend: React + Vite
 - Backend: FastAPI
-- AI: Groq API (optional; demo mode works without an API key)
+- AI: Groq API with Qwen 3.8 27B for text + image understanding (optional; demo mode works without an API key)
 - Document parsing: PyMuPDF + python-docx
 - PPTX export: python-pptx
 
@@ -79,3 +79,12 @@ Open the URL shown by Vite, normally `http://localhost:5173`.
 The project intentionally does not hard-code any secret API key. Never commit your real `.env` file.
 
 For production, add authentication, persistent storage, rate limiting, background jobs, and an external object store.
+
+
+## Image input
+PNG/JPG/WEBP uploads are sent as actual image data to the Groq multimodal model for visual understanding/OCR. The filename and dimensions are not used as the source content.
+
+Production model:
+```env
+GROQ_MODEL=qwen/qwen3.8-27b
+```

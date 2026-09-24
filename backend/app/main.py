@@ -55,7 +55,7 @@ def health():
     return {
         "status": "ok",
         "ai_configured": bool(os.getenv("GROQ_API_KEY")),
-        "model": os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        "model": os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
     }
 
 
@@ -100,7 +100,7 @@ async def transform_upload(
 
     raw = await file.read()
     try:
-        source_text, meta = extract_source(raw, file.filename or "upload")
+        source_text, meta, image_data_url = extract_source(raw, file.filename or "upload")
         if not source_text.strip():
             raise ValueError("No readable content was found in the uploaded file.")
 
@@ -113,6 +113,7 @@ async def transform_upload(
             detail=detail,
             objective=objective,
             style=style,
+            image_data_url=image_data_url,
         )
         result["source"]["filename"] = file.filename
         result["source"]["file_meta"] = meta
