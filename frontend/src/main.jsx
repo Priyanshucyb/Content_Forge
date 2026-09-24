@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-const API = "http://localhost:8000/api";
+const API = (import.meta.env.VITE_API_URL || "http://localhost:8000/api").replace(/\/$/, "");
 
 const outputOptions = [
   ["linkedin", "LinkedIn Post", Linkedin],
@@ -197,8 +197,16 @@ function App() {
           <section className="results">
             <div className="resultHeader">
               <div><div className="eyebrow">GENERATED OUTPUTS</div><h2>Communication workspace</h2></div>
-              <div className="mode">Engine: {result.mode}</div>
+              <div className={`mode ${result.mode?.includes("fallback") ? "warningMode" : ""}`}>Engine: {result.mode}</div>
             </div>
+            {result.source_intelligence && (
+              <div className="sourceIntel">
+                <div><b>Source Intelligence</b><span>{result.source_intelligence.content_type || "source"}</span></div>
+                <strong>{result.source_intelligence.title || "Source analyzed"}</strong>
+                <p>{result.source_intelligence.summary}</p>
+                {result.source_intelligence.key_facts?.length > 0 && <ul>{result.source_intelligence.key_facts.slice(0,5).map((x,i)=><li key={i}>{x}</li>)}</ul>}
+              </div>
+            )}
 
             <div className="resultGrid">
               {Object.entries(result.outputs).filter(([k]) => k !== "_warning").map(([key, value]) => (

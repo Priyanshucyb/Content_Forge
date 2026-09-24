@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 from io import BytesIO
 import os
@@ -48,6 +48,7 @@ class TransformResponse(BaseModel):
     mode: str
     source: Dict[str, Any]
     outputs: Dict[str, Any]
+    error: Optional[str] = None
 
 
 @app.get("/api/health")
@@ -119,7 +120,7 @@ async def transform_upload(
         result["source"]["file_meta"] = meta
         return result
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=502 if os.getenv("GROQ_API_KEY") else 400, detail=str(exc))
 
 
 @app.post("/api/export/pptx")

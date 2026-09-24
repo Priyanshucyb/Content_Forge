@@ -96,3 +96,12 @@ The AI flow is now two-stage:
 2. Transformation Engine: generates all selected artefacts from that shared verified brief.
 
 This avoids generating each output directly from a filename/metadata placeholder and makes the architecture easier to explain during evaluation.
+
+
+## v4 reliability fixes
+- Uses Groq's documented multimodal chat endpoint directly for predictable vision requests.
+- Normalizes uploaded images and keeps them below the documented 20 MB vision limit.
+- Separates image metadata from actual visual content.
+- Removes silent demo fallback when a Groq key exists; API errors are surfaced to the UI.
+- Uses the shared Source Intelligence brief as the factual input to the transformation stage.
+- Frontend API URL is controlled by `VITE_API_URL`.

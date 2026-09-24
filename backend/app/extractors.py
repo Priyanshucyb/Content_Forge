@@ -3,7 +3,7 @@ import base64
 from pathlib import Path
 import fitz
 from docx import Document
-from PIL import Image
+from PIL import Image, ImageOps
 import re
 
 
@@ -12,6 +12,24 @@ def _clean(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+def _prepare_image(raw: bytes):
+    """Normalize images for vision: readable resolution and safely below Groq's 20MB limit."""
+    img = Image.open(BytesIO(raw))
+    img = ImageOps.exif_transpose(img).convert("RGB")
+
+    # Keep enough resolution for OCR while avoiding oversized data URLs.
+    max_dim = 1800
+    if max(img.size) > max_dim:
+        scale = max_dim / max(img.size)
+        img = img.resize((max(1, int(img.width * scale)), max(1, int(img.height * scale))), Image.Resampling.LANCZOS)
+
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=90, optimize=True)
+    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
+    data_url = f"data:image/jpeg;base64,{encoded}"
+    return img, data_url, len(buf.getvalue())
 
 
 def extract_source(raw: bytes, filename: str):
@@ -38,15 +56,10 @@ def extract_source(raw: bytes, filename: str):
         return _clean(text), {"type": "docx", "paragraphs": len(chunks), "chars": len(text)}, None
 
     if suffix in {".png", ".jpg", ".jpeg", ".webp"}:
-        # The image itself is preserved as metadata, but OCR is intentionally
-        # handled by the AI provider only when an API key is configured.
-        img = Image.open(BytesIO(raw))
-        mime = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}[suffix]
-        data_url = f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
+        img, data_url, encoded_size = _prepare_image(raw)
         return (
-            f"[IMAGE SOURCE]\nThe uploaded image is the primary source. Filename: {filename}\n"
-            f"Dimensions: {img.width}x{img.height}",
-            {"type": "image", "width": img.width, "height": img.height},
+            f"[IMAGE SOURCE]\nFilename: {filename}\nDimensions: {img.width}x{img.height}",
+            {"type": "image", "width": img.width, "height": img.height, "prepared_bytes": encoded_size},
             data_url,
         )
 

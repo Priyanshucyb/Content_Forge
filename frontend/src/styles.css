@@ -88,3 +88,5 @@ pre { white-space:pre-wrap; color:#aab5c9; font-size:11px; }
 @keyframes spin { to { transform:rotate(360deg); } }
 @media(max-width:850px) { .grid,.resultGrid { grid-template-columns:1fr; } .hero { flex-direction:column; align-items:flex-start; } .heroCard { width:100%; } }
 @media(max-width:520px) { .shell { width:94vw; padding-top:30px; } .topbar { padding:0 3vw; } .controls { grid-template-columns:1fr; } .outputGrid { grid-template-columns:1fr; } .panel { padding:17px; } }
+
+.sourceIntel{margin:0 0 18px;padding:16px 18px;border:1px solid #26344f;border-radius:14px;background:#0a1020}.sourceIntel>div{display:flex;justify-content:space-between;gap:12px;color:#8ea5cf;font-size:12px;text-transform:uppercase;letter-spacing:.08em}.sourceIntel>strong{display:block;margin-top:8px;font-size:18px}.sourceIntel p{color:#b7c4dc;line-height:1.55}.sourceIntel li{margin:5px 0;color:#c8d3e8}.warningMode{border-color:#8a5b20;color:#ffbf67}
