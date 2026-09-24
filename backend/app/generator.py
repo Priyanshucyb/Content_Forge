@@ -115,53 +115,47 @@ def _groq_outputs(
     settings: Dict[str, str],
     image_data_url: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Two-stage pipeline:
+    1) Build a source-intelligence brief from the actual source/image.
+    2) Transform that verified brief into every requested artefact.
+    """
     client = Groq(api_key=os.environ["GROQ_API_KEY"])
     model = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
-    output_schema = {
-        key: (
-            "Return an object with title, content, and source_basis."
-            if key == "linkedin" else
-            "Return an object with title and posts (array of strings)."
-            if key == "x" else
-            "Return an object with title and sections (array of {heading, body})."
-            if key == "advisory" else
-            "Return an object with title, summary, key_points (array), and implications."
-            if key == "summary" else
-            "Return an object with title, slides (array of {title, bullets}), and speaker_notes (array)."
-            if key == "presentation" else
-            "Return an object with title, headline, sections (array of {label, points}), and layout."
-            if key == "infographic" else
-            "Return an object with title, duration, narration, scenes (array of {scene, visual, narration}), and subtitles (array)."
-            if key == "video" else
-            "Return a JSON object."
-        )
-        for key in outputs
-    }
+    # ---------- Stage 1: source intelligence ----------
+    analysis_prompt = """You are the Source Intelligence module of ContentForge AI.
 
-    system = """You are ContentForge AI, a professional content transformation engine.
-Transform the provided source into the requested communication artefacts.
+Analyze the supplied source material. If an image is present, inspect the ACTUAL
+image carefully: read visible text, headings, labels, numbers, tables, charts,
+logos, objects, people (only when relevant to the content), dates and overall
+context. Perform OCR/visual understanding.
 
-IMPORTANT:
-- If an image is supplied, inspect the actual image. Read visible text, headings,
-  numbers, charts and relevant visual context. Perform visual understanding/OCR.
-- Do not treat the filename or image dimensions as the content.
-- Do not invent facts, names, numbers, quotes, dates, or citations.
-- If something is unreadable, say it is unavailable.
-- Use the same verified source facts across every selected output.
-- Make outputs polished and publication-ready.
-- Respect audience, tone, language, detail, objective and style.
-- Return VALID JSON ONLY with an object named "outputs".
+Return JSON with exactly these fields:
+{
+  "title": "...",
+  "content_type": "article|report|announcement|poster|social_post|document|photo|chart|other",
+  "summary": "...",
+  "key_facts": ["..."],
+  "entities": ["..."],
+  "dates": ["..."],
+  "numbers": ["..."],
+  "key_messages": ["..."],
+  "visual_findings": ["..."],
+  "uncertainties": ["..."]
+}
+
+Rules:
+- The image itself is the source, not its filename or dimensions.
+- Do NOT say "no readable text" merely because OCR is difficult. First inspect the
+  visual content and describe meaningful visual information when available.
+- Do not invent facts. If something cannot be established, put it in uncertainties.
+- Keep facts concise and useful for downstream content generation.
+- Return VALID JSON ONLY.
 """
 
     user_content = [{
         "type": "text",
-        "text": json.dumps({
-            "source_text": source,
-            "settings": settings,
-            "requested_outputs": {k: OUTPUT_NAMES.get(k, k) for k in outputs},
-            "schema": output_schema,
-        }, ensure_ascii=False)
+        "text": analysis_prompt + "\n\nSOURCE TEXT:\n" + source
     }]
     if image_data_url:
         user_content.append({
@@ -169,17 +163,89 @@ IMPORTANT:
             "image_url": {"url": image_data_url}
         })
 
-    response = client.chat.completions.create(
+    analysis_response = client.chat.completions.create(
         model=model,
-        temperature=0.2,
+        temperature=0.3,
+        max_completion_tokens=3000,
         response_format={"type": "json_object"},
         messages=[
-            {"role": "system", "content": system},
+            {"role": "system", "content": "You extract reliable source facts for a downstream content engine."},
             {"role": "user", "content": user_content},
         ],
     )
-    data = json.loads(response.choices[0].message.content)
-    return data.get("outputs", data)
+    source_brief = json.loads(analysis_response.choices[0].message.content)
+
+    # ---------- Stage 2: transformation ----------
+    output_schema = {}
+    for key in outputs:
+        if key == "linkedin":
+            output_schema[key] = "object {title, hook, content, hashtags, source_basis}"
+        elif key == "x":
+            output_schema[key] = "object {title, posts: array of strings, source_basis}"
+        elif key == "advisory":
+            output_schema[key] = "object {title, priority, situation, key_findings, impact, recommended_actions, source_basis}"
+        elif key == "summary":
+            output_schema[key] = "object {title, executive_summary, key_points, implications, recommended_next_steps}"
+        elif key == "presentation":
+            output_schema[key] = "object {title, slides: array of {title, bullets, speaker_notes}, source_basis}"
+        elif key == "infographic":
+            output_schema[key] = "object {title, headline, key_statements, sections: array of {label, points}, visual_direction, call_to_action}"
+        elif key == "video":
+            output_schema[key] = "object {title, duration, opening_hook, scenes: array of {scene, duration, visual, narration, on_screen_text}, narration, subtitles}"
+
+    transform_prompt = f"""You are ContentForge AI's Transformation Engine.
+
+Transform ONE verified source-intelligence brief into the requested communication
+artefacts.
+
+SOURCE INTELLIGENCE:
+{json.dumps(source_brief, ensure_ascii=False, indent=2)}
+
+GENERATION SETTINGS:
+{json.dumps(settings, ensure_ascii=False)}
+
+REQUESTED OUTPUTS:
+{json.dumps({k: OUTPUT_NAMES.get(k, k) for k in outputs}, ensure_ascii=False)}
+
+OUTPUT SCHEMAS:
+{json.dumps(output_schema, ensure_ascii=False, indent=2)}
+
+QUALITY RULES:
+1. Use the source intelligence as the factual ground truth.
+2. Never invent facts, statistics, dates, names, quotes, sources or claims.
+3. Do not mention the uploaded filename or image dimensions unless they are
+   genuinely relevant to the source.
+4. Every output must be polished enough to show in a hackathon demo.
+5. Match the selected audience, tone, language, detail, objective and style.
+6. Make each format genuinely different:
+   - LinkedIn: strong hook, useful body, concise CTA/hashtags.
+   - X: short platform-ready posts, coherent thread.
+   - Advisory: situation, impact, action-oriented recommendations.
+   - Executive Summary: concise decision-maker briefing.
+   - Presentation: meaningful slide sequence, not generic placeholders.
+   - Infographic: short visual messages and layout direction.
+   - Video: production-ready scenes, narration and on-screen text.
+7. If the source is an image/poster, use its actual visible message and visual
+   context rather than saying the image is merely an image.
+8. Return VALID JSON ONLY with an object named "outputs".
+"""
+
+    transform_response = client.chat.completions.create(
+        model=model,
+        temperature=0.6,
+        max_completion_tokens=7000,
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": "You are a senior editorial and communication transformation engine."},
+            {"role": "user", "content": transform_prompt},
+        ],
+    )
+    data = json.loads(transform_response.choices[0].message.content)
+    return {
+        "outputs": data.get("outputs", data),
+        "_source_intelligence": source_brief,
+    }
+
 
 def generate_outputs(source_text: str, outputs: List[str], audience: str, tone: str,
                      language: str, detail: str, objective: str, style: str,
@@ -199,12 +265,15 @@ def generate_outputs(source_text: str, outputs: List[str], audience: str, tone: 
 
     if os.getenv("GROQ_API_KEY"):
         try:
-            generated = _groq_outputs(source_text, valid, settings)
+            generated = _groq_outputs(
+                source_text, valid, settings, image_data_url=image_data_url
+            )
             mode = "groq"
         except Exception as exc:
-            # Graceful fallback keeps the demo usable if the provider is unavailable.
             generated = _demo_outputs(source_text, valid, settings)
-            generated["_warning"] = f"AI provider unavailable; demo mode used. Reason: {type(exc).__name__}"
+            generated["_warning"] = (
+                f"AI provider unavailable; demo mode used. Reason: {type(exc).__name__}: {exc}"
+            )
             mode = "demo-fallback"
     else:
         generated = _demo_outputs(source_text, valid, settings)
@@ -217,5 +286,6 @@ def generate_outputs(source_text: str, outputs: List[str], audience: str, tone: 
             "preview": source_text[:700],
             "outputs_requested": valid,
         },
-        "outputs": generated,
+        "outputs": generated.get("outputs", generated),
+        "source_intelligence": generated.get("_source_intelligence"),
     }

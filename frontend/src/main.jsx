@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const API = "http://localhost:8000/api";
 
 const outputOptions = [
   ["linkedin", "LinkedIn Post", Linkedin],
@@ -225,14 +225,41 @@ function App() {
 }
 
 function ResultBody({type,data}) {
-  if (type === "linkedin" || type === "summary") {
-    return <div className="rich"><p>{data.content || data.summary}</p>{data.key_points && <ul>{data.key_points.map((x,i)=><li key={i}>{x}</li>)}</ul>}</div>;
+  if (type === "linkedin") {
+    return <div className="rich">
+      {data.hook && <p><b>Hook:</b> {data.hook}</p>}
+      <p>{data.content}</p>
+      {data.hashtags?.length > 0 && <p><b>{data.hashtags.join(" ")}</b></p>}
+    </div>;
+  }
+  if (type === "summary") {
+    return <div className="rich">
+      <p>{data.executive_summary || data.summary}</p>
+      {data.key_points && <ul>{data.key_points.map((x,i)=><li key={i}>{x}</li>)}</ul>}
+      {data.implications && <p><b>Implications:</b> {data.implications}</p>}
+      {data.recommended_next_steps && <p><b>Next steps:</b> {data.recommended_next_steps.join(" • ")}</p>}
+    </div>;
   }
   if (type === "x") return <div className="thread">{data.posts?.map((x,i)=><div key={i}><span>{i+1}</span>{x}</div>)}</div>;
-  if (type === "advisory") return <div className="sections">{data.sections?.map((s,i)=><div key={i}><b>{s.heading}</b><p>{s.body}</p></div>)}</div>;
+  if (type === "advisory") return <div className="sections">
+    {data.priority && <div><b>Priority</b><p>{data.priority}</p></div>}
+    {data.situation && <div><b>Situation</b><p>{data.situation}</p></div>}
+    {data.key_findings && <div><b>Key Findings</b><p>{data.key_findings.join(" • ")}</p></div>}
+    {data.impact && <div><b>Impact</b><p>{data.impact}</p></div>}
+    {data.recommended_actions && <div><b>Recommended Actions</b><p>{data.recommended_actions.join(" • ")}</p></div>}
+  </div>;
   if (type === "presentation") return <div className="slides">{data.slides?.map((s,i)=><div className="slideMini" key={i}><b>{i+1}. {s.title}</b><ul>{s.bullets?.map((b,j)=><li key={j}>{b}</li>)}</ul></div>)}</div>;
   if (type === "infographic") return <div className="sections">{data.sections?.map((s,i)=><div key={i}><b>{s.label}</b><p>{s.points?.join(" • ")}</p></div>)}</div>;
-  if (type === "video") return <div className="sections"><p><b>Duration:</b> {data.duration}</p>{data.scenes?.map(s=><div key={s.scene}><b>Scene {s.scene} — {s.visual}</b><p>{s.narration}</p></div>)}</div>;
+  if (type === "video") return <div className="sections">
+    <p><b>Duration:</b> {data.duration}</p>
+    {data.opening_hook && <p><b>Hook:</b> {data.opening_hook}</p>}
+    {data.scenes?.map(s=><div key={s.scene}>
+      <b>Scene {s.scene} — {s.duration}</b>
+      <p><b>Visual:</b> {s.visual}</p>
+      <p><b>Narration:</b> {s.narration}</p>
+      {s.on_screen_text && <p><b>On-screen:</b> {s.on_screen_text}</p>}
+    </div>)}
+  </div>;
   return <pre>{JSON.stringify(data,null,2)}</pre>;
 }
 

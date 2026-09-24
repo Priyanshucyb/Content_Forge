@@ -88,3 +88,11 @@ Production model:
 ```env
 GROQ_MODEL=qwen/qwen3.8-27b
 ```
+
+## v3 Source Intelligence Pipeline
+
+The AI flow is now two-stage:
+1. Source Intelligence: extracts facts and visual context from the source/image.
+2. Transformation Engine: generates all selected artefacts from that shared verified brief.
+
+This avoids generating each output directly from a filename/metadata placeholder and makes the architecture easier to explain during evaluation.
